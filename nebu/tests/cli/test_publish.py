@@ -103,13 +103,18 @@ class TestPublishCmd:
         assert expected_output in result.output
 
         # Check the sent contents
-        request_data = resp_callback.captured_request._request.body
+        captured_request = resp_callback.captured_request._request
+        request_data = captured_request.body
+        request_content_length = captured_request.headers['Content-Length']
         # Discover the multipart/form-data boundry
         boundary = request_data.split(b'\r\n')[0][2:]
-        form = parse_multipart(io.BytesIO(request_data),
-                               {'boundary': boundary})
-        assert form['publisher'][0] == publisher.encode('utf8')
-        assert form['message'][0] == message.encode('utf8')
+        form = parse_multipart(
+            io.BytesIO(request_data),
+            {'boundary': boundary,
+             'CONTENT-LENGTH': request_content_length},
+        )
+        assert form['publisher'][0] == publisher
+        assert form['message'][0] == message
         # Check the zipfile for contents
         with zipfile.ZipFile(io.BytesIO(form['file'][0])) as zb:
             included_files = set(zb.namelist())
@@ -160,13 +165,18 @@ class TestPublishCmd:
         assert expected_output in result.output
 
         # Check the sent contents
-        request_data = resp_callback.captured_request._request.body
+        captured_request = resp_callback.captured_request._request
+        request_data = captured_request.body
+        request_content_length = captured_request.headers['Content-Length']
         # Discover the multipart/form-data boundry
         boundary = request_data.split(b'\r\n')[0][2:]
-        form = parse_multipart(io.BytesIO(request_data),
-                               {'boundary': boundary})
-        assert form['publisher'][0] == publisher.encode('utf8')
-        assert form['message'][0] == message.encode('utf8')
+        form = parse_multipart(
+            io.BytesIO(request_data),
+            {'boundary': boundary,
+             'CONTENT-LENGTH': request_content_length},
+        )
+        assert form['publisher'][0] == publisher
+        assert form['message'][0] == message
         # Check the zipfile for contents
         with zipfile.ZipFile(io.BytesIO(form['file'][0])) as zb:
             included_files = set(zb.namelist())
