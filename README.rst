@@ -5,8 +5,9 @@ This is a command-line interface for interacting with connexions content. The to
 
 This software requires:
 
-- Python >= 3.5
+- Python 3.5.6
 - JRE >= 6
+- JDK
 
 
 Install

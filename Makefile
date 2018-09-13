@@ -20,7 +20,7 @@ VENV_EXTRA_ARGS =
 $(STATEDIR)/env/pyvenv.cfg : $(_REQUIREMENTS_FILES)
 	# Create our Python 3 virtual environment
 	rm -rf $(STATEDIR)/env
-	python3 -m venv $(VENV_EXTRA_ARGS) $(STATEDIR)/env
+	python3.5 -m venv $(VENV_EXTRA_ARGS) $(STATEDIR)/env
 
 	# Upgrade tooling requirements
 	$(BINDIR)/python -m pip install --upgrade pip setuptools wheel
