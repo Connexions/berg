@@ -8,7 +8,11 @@ from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
 from ..logger import logger
-from ._common import common_params, confirm, get_base_url
+from ._common import (common_params,
+                      confirm,
+                      get_base_url,
+                      get_base_url_from_url,
+                      )
 from .exceptions import *  # noqa: F403
 
 
@@ -18,30 +22,31 @@ from .exceptions import *  # noqa: F403
               help="output directory name (can't previously exist)")
 @click.option('-t', '--book-tree', is_flag=True,
               help="create human-friendly book-tree")
-@click.argument('env')
-@click.argument('col_id')
-@click.argument('col_version')
+@click.argument('target', nargs=-1)
 @click.pass_context
-def get(ctx, env, col_id, col_version, output_dir, book_tree):
+def get(ctx, target, output_dir, book_tree):
     """download and expand the completezip to the current working directory"""
 
-    # Build the base url
-    base_url = get_base_url(ctx, env)
-    parsed_url = urlparse(base_url)
-    sep = len(parsed_url.netloc.split('.')) > 2 and '-' or '.'
-    url_parts = [
-        parsed_url.scheme,
-        'archive{}{}'.format(sep, parsed_url.netloc),
-    ] + list(parsed_url[2:])
-    base_url = urlunparse(url_parts)
+    if len(target) == 1:  # target as url
+        base_url = get_base_url_from_url(target[0])
+        content_path = urlparse(target[0]).path.split(':')[0]
+        url = urlunparse(urlparse(base_url)._replace(path=content_path))
 
-    col_hash = '{}/{}'.format(col_id, col_version)
+    elif len(target) == 3:  # env colid ver
+        env, col_id, col_version = target
+        base_url = get_base_url_from_url(get_base_url(ctx, env))
+        col_hash = '{}/{}'.format(col_id, col_version)
+        url = '{}/content/{}'.format(base_url, col_hash)
+    else:
+        raise ValueError("Wrong number of params")
+
     # Fetch metadata
-    url = '{}/content/{}'.format(base_url, col_hash)
     resp = requests.get(url)
     if resp.status_code >= 400:
-        raise MissingContent(col_id, col_version)
+        raise MissingContent(target)
     col_metadata = resp.json()
+    col_id = col_metadata['legacy_id']
+    col_version = col_metadata['legacy_version']
     uuid = col_metadata['id']
     version = col_metadata['version']
 
