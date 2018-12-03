@@ -31,6 +31,7 @@ def get(ctx, target, output_dir, book_tree):
         base_url = get_base_url_from_url(target[0])
         content_path = urlparse(target[0]).path.split(':')[0]
         url = urlunparse(urlparse(base_url)._replace(path=content_path))
+        col_version = None
 
     elif len(target) == 3:  # env colid ver
         env, col_id, col_version = target
@@ -50,6 +51,7 @@ def get(ctx, target, output_dir, book_tree):
         resp = requests.get(url)
         col_metadata = resp.json()
     uuid = col_metadata['id']
+    col_id = col_metadata['legacy_id']
     version = col_metadata['version']
 
     # Generate full output dir as soon as we have the version
@@ -69,7 +71,7 @@ def get(ctx, target, output_dir, book_tree):
     resp = requests.get(url)
 
     # Latest defaults to successfully baked - we need headVersion
-    if col_version == 'latest':
+    if col_version == 'latest' or col_version is None:
         version = resp.json()['headVersion']
         url = '{}/extras/{}@{}'.format(base_url, uuid, version)
         resp = requests.get(url)

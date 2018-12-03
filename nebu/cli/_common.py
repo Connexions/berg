@@ -83,7 +83,12 @@ def get_base_url_from_url(url):
     # function that returns a json data tree. This extracts it and makes
     # it python-json friendly
     settings_pr = urlparse(url)._replace(path='/scripts/settings.js')
+
+    if settings_pr.netloc.startswith('legacy'):  # Remove 'legacy[.-]'
+        settings_pr = settings_pr._replace(netloc=settings_pr.netloc[7:])
+
     settings_url = urlunparse(settings_pr)
+    # Fetch the JS, chop out the definition
     s = requests.get(settings_url).text
     s = s[s.find('return ') + 7:]
     # we now point at the { after the return
