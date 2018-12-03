@@ -29,18 +29,29 @@ from .exceptions import (MissingContent,
 def get(ctx, env, col_id, col_version, output_dir, book_tree, get_resources):
     """download and expand the completezip to the current working directory"""
 
-    base_url = build_archive_url(ctx, env)
-
     version = None
     req_version = col_version
-    if col_version.count('.') > 1:
-        full_version = col_version.split('.')
-        col_version = '.'.join(full_version[:2])
-        version = '.'.join(full_version[1:])
 
-    col_hash = '{}/{}'.format(col_id, col_version)
+    if len(target) == 1:  # target as url
+        base_url = get_base_url_from_url(target[0])
+        content_path = urlparse(target[0]).path.split(':')[0]
+        url = urlunparse(urlparse(base_url)._replace(path=content_path))
+        col_version = None
+
+    elif len(target) == 3:  # env colid ver
+        env, col_id, col_version = target
+        if col_version.count('.') > 1:
+            full_version = col_version.split('.')
+            col_version = '.'.join(full_version[:2])
+            version = '.'.join(full_version[1:])
+
+        base_url = get_base_url_from_url(get_base_url(ctx, env))
+        col_hash = '{}/{}'.format(col_id, col_version)
+        url = '{}/content/{}'.format(base_url, col_hash)
+    else:
+        raise ValueError("Wrong number of params")
+
     # Fetch metadata
-    url = '{}/content/{}'.format(base_url, col_hash)
     resp = requests.get(url)
     if resp.status_code >= 400:
         raise MissingContent(col_id, req_version)
@@ -64,6 +75,8 @@ def get(ctx, env, col_id, col_version, output_dir, book_tree, get_resources):
         if resp.status_code >= 400:  # Requested version doesn't exist
             raise MissingContent(col_id, req_version)
         col_metadata = resp.json()
+    col_id = col_metadata['legacy_id']
+    version = col_metadata['version']
 
     version = col_metadata['version']
 
@@ -84,7 +97,7 @@ def get(ctx, env, col_id, col_version, output_dir, book_tree, get_resources):
     resp = requests.get(url)
 
     # Latest defaults to successfully baked - we need headVersion
-    if col_version == 'latest':
+    if col_version == 'latest' or col_version is None:
         version = resp.json()['headVersion']
         url = '{}/extras/{}@{}'.format(base_url, uuid, version)
         resp = requests.get(url)
