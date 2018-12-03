@@ -29,6 +29,27 @@ def parse_book_tree(bookdir):
 
 
 def _publish(base_url, struct, message, username, password):
+    auth = HTTPBasicAuth(username, password)
+
+    """Check for good credentials"""
+    auth_ping_url = '{}/api/auth-ping'.format(base_url)
+    auth_ping_resp = requests.post(auth_ping_url, auth=auth)
+
+    if auth_ping_resp.status_code == 401:
+        logger.debug('Temporary raw output...')
+        logger.error('Bad credentials: \n{}'.format(auth_ping_resp.content))
+        return False
+
+    """Check for permission to publish"""
+    publish_ping_url = '{}/api/publish-ping'.format(base_url)
+    publish_ping_resp = requests.post(publish_ping_url, auth=auth)
+
+    if publish_ping_resp.status_code == 401:
+        logger.debug('Temporary raw output...')
+        logger.error('Publishing not allowed: \n{}'.format(
+            publish_ping_resp.content))
+        return False
+
     """Publish the struct to a repository"""
     collection_id = struct[0].id
     # Base encapsulating directory within the zipfile
@@ -47,21 +68,22 @@ def _publish(base_url, struct, message, username, password):
                 rel_file_path = base_file_path / model.file.name
                 files.append((file, rel_file_path))
                 for resource in model.resources:
-                    files.append((resource, base_file_path / resource.name))
+                    files.append((resource.data,
+                                  base_file_path / resource.filename))
             else:  # Module
                 file = model.file
                 rel_file_path = base_file_path / model.id / model.file.name
                 files.append((file, rel_file_path))
                 for resource in model.resources:
-                    files.append((resource,
-                                  base_file_path / model.id / resource.name))
+                    files.append((resource.data,
+                                  base_file_path /
+                                  model.id / resource.filename))
 
             for file, rel_file_path in files:
                 zb.write(str(file), str(rel_file_path))
 
     url = '{}/api/publish-litezip'.format(base_url)
     headers = {'X-API-Version': '3'}
-    auth = HTTPBasicAuth(username, password)
 
     # FIXME We don't have nor want explicit setting of the publisher.
     #       The publisher will come through as part of the authentication

@@ -1,11 +1,26 @@
 ==========
 Change Log
 ==========
+7.1.2
+-----
+
+- Preemptively check for credentials
+- Allow outside of CWD `get` output dir.
+
+7.1.1
+-----
+
+- Correct numbering for 'Introduction' pages.
 
 7.1.0
 -----
 
 - Support book tree for both `get` and `publish`
+
+7.0.1
+-----
+
+- fix litezip 1.5 compatability
 
 7.0.0
 -----
@@ -21,6 +36,7 @@ Change Log
 -----
 
 - fixup basic auth header - use library rather than roll our own
+
 6.0.0
 -----
 
