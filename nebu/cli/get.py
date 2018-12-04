@@ -32,10 +32,16 @@ def get(ctx, target, output_dir, book_tree):
         content_path = urlparse(target[0]).path.split(':')[0]
         url = urlunparse(urlparse(base_url)._replace(path=content_path))
         col_version = None
+        version = None
 
     elif len(target) == 3:  # env colid ver
         env, col_id, col_version = target
         base_url = get_base_url_from_url(get_base_url(ctx, env))
+        if col_version.count('.') > 1:
+            full_version = col_version.split('.')
+            col_version = '.'.join(full_version[:2])
+            version = '.'.join(full_version[1:])
+
         col_hash = '{}/{}'.format(col_id, col_version)
         url = '{}/content/{}'.format(base_url, col_hash)
     else:
@@ -51,8 +57,13 @@ def get(ctx, target, output_dir, book_tree):
         resp = requests.get(url)
         col_metadata = resp.json()
     uuid = col_metadata['id']
-    col_id = col_metadata['legacy_id']
-    version = col_metadata['version']
+    if version and version != col_metadata['version']:
+        url = '{}/contents/{}@{}'.format(base_url, uuid, version) + \
+              '?as_collated=False'
+        resp = requests.get(url)
+        col_metadata = resp.json()
+    else:
+        version = col_metadata['version']
 
     # Generate full output dir as soon as we have the version
     if output_dir is None:
