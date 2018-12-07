@@ -6,8 +6,16 @@ import requests
 from lxml import etree
 from pathlib import Path
 
+from urllib.parse import urlparse, urlunparse
+
 from ..logger import logger
-from ._common import common_params, confirm, build_archive_url
+
+from ._common import (common_params,
+                      confirm,
+                      get_base_url,
+                      get_base_url_from_url,
+                      )
+
 from .exceptions import (MissingContent,
                          ExistingOutputDir,
                          OldContent,
@@ -22,15 +30,12 @@ from .exceptions import (MissingContent,
               help="create human-friendly book-tree")
 @click.option('-r', '--get-resources', is_flag=True, default=False,
               help="Also get all resources (images)")
-@click.argument('env')
-@click.argument('col_id')
-@click.argument('col_version')
+@click.argument('target', nargs=-1)
 @click.pass_context
-def get(ctx, env, col_id, col_version, output_dir, book_tree, get_resources):
+def get(ctx, target, output_dir, book_tree, get_resources):
     """download and expand the completezip to the current working directory"""
 
     version = None
-    req_version = col_version
 
     if len(target) == 1:  # target as url
         base_url = get_base_url_from_url(target[0])
@@ -54,14 +59,14 @@ def get(ctx, env, col_id, col_version, output_dir, book_tree, get_resources):
     # Fetch metadata
     resp = requests.get(url)
     if resp.status_code >= 400:
-        raise MissingContent(col_id, req_version)
+        raise MissingContent(target)
     col_metadata = resp.json()
     if col_metadata['collated']:
         url = resp.url + '?as_collated=False'
         resp = requests.get(url)
         if resp.status_code >= 400:
             # This should never happen - indicates that only baked exists?
-            raise MissingContent(col_id, req_version)
+            raise MissingContent(target)
         col_metadata = resp.json()
     uuid = col_metadata['id']
     # metadata fetch used legacy IDs, so will only have
@@ -73,10 +78,13 @@ def get(ctx, env, col_id, col_version, output_dir, book_tree, get_resources):
               '?as_collated=False'
         resp = requests.get(url)
         if resp.status_code >= 400:  # Requested version doesn't exist
-            raise MissingContent(col_id, req_version)
+            raise MissingContent(target)
         col_metadata = resp.json()
+    else:
+        version = col_metadata['version']
+
     col_id = col_metadata['legacy_id']
-    version = col_metadata['version']
+    col_version = col_metadata['legacy_version']
 
     version = col_metadata['version']
 
@@ -201,8 +209,22 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
         gen_resources_sha1_cache(write_dir, metadata['resources'])
 
         # core files are XML - this parse/serialize removes numeric entities
-        filepath.write_bytes(etree.tostring(etree.XML(file_resp.text),
-                                            encoding='utf-8'))
+        # FIXME hackery to extend MDML w/ uuid info
+        xml = etree.XML(file_resp.text)
+        ns = xml.nsmap
+        ns['default'] = ns.pop(None)
+        md_node = xml.xpath('//default:metadata', namespaces=ns)[0]
+        doc_uuid = etree.SubElement(md_node,
+                                    '{{{md}}}document-uuid'.format(**ns))
+        doc_uuid.text = metadata['id']
+        doc_ver = etree.SubElement(md_node,
+                                   '{{{md}}}document-version'.format(**ns))
+        doc_ver.text = metadata['version']
+        doc_hash = etree.SubElement(md_node,
+                                    '{{{md}}}document-hash'.format(**ns))
+        doc_hash.text = '{id}@{version}'.format(**metadata)
+        filepath.write_bytes(etree.tostring(xml, encoding='utf-8',
+                                            pretty_print=True))
         if get_resources:
             for res in resources:  # Dict keyed by resource filename
                 if res != filename:

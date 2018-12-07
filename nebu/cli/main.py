@@ -11,6 +11,7 @@ from .atom import config_atom
 from .get import get
 from .environment import list_environments
 from .publish import publish
+from .push import push
 from .validate import validate
 
 
@@ -97,4 +98,5 @@ cli.add_command(config_atom)
 cli.add_command(get)
 cli.add_command(list_environments)
 cli.add_command(publish)
+cli.add_command(push)
 cli.add_command(validate)

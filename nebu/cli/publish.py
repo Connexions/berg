@@ -192,6 +192,10 @@ def _publish(base_url, struct, message, username, password):
         logger.debug('Temporary raw output...')
         logger.error('ERROR: \n{}'.format(resp.content))
         return False
+    elif resp.status_code == 401:
+        logger.debug('Temporary raw output...')
+        logger.error('Bad credentials: \n{}'.format(resp.content))
+        return False
     else:  # pragma: no cover
         logger.error("unknown response:\n  status: {}\n  contents: {}"
                      .format(resp.status_code, resp.text))
