@@ -15,6 +15,7 @@ from ._common import (common_params,
                       get_base_url_from_url,
                       )
 from .exceptions import (MissingContent,
+                         MissingBakedContent,
                          ExistingOutputDir,
                          OldContent,
                          )
@@ -62,7 +63,7 @@ def get(ctx, target, output_dir, book_tree, get_resources, get_baked):
     col_metadata = resp.json()
 
     if get_baked and not col_metadata['collated']:
-        raise MissingContent(target)
+        raise MissingBakedContent(target)
 
     uuid = col_metadata['id']
     url = resp.url
@@ -224,19 +225,30 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
             # core files are XML - parse/serialize removes numeric entities
             # FIXME HACK hackery to extend MDML w/ uuid info, for use by
             # `push` subcommand
-            xml = etree.XML(file_resp.text)
+            file_text = file_resp.text
+            try:
+                xml = etree.XML(file_text)
+            except ValueError:
+                xml = etree.XML(file_text[file_text.find('\n') + 1:])
             ns = xml.nsmap
             ns['default'] = ns.pop(None)  # Could be cnxml or collxml
+            ns['md'] = 'http://cnx.rice.edu/mdml'
             md_node = xml.xpath('//default:metadata', namespaces=ns)[0]
-            doc_uuid = etree.SubElement(md_node,
-                                        '{{{md}}}document-uuid'.format(**ns))
-            doc_uuid.text = metadata['id']
-            doc_ver = etree.SubElement(md_node,
-                                       '{{{md}}}document-version'.format(**ns))
-            doc_ver.text = metadata['version']
-            doc_hash = etree.SubElement(md_node,
-                                        '{{{md}}}document-hash'.format(**ns))
-            doc_hash.text = '{id}@{version}'.format(**metadata)
+            if md_node.xpath('/md:document-id', namespaces=ns) == []:
+                doc_uuid = (etree.
+                            SubElement(md_node,
+                                       '{{{md}}}document-uuid'.format(**ns)))
+                doc_uuid.text = metadata['id']
+            if md_node.xpath('/md:document-version', namespaces=ns) == []:
+                doc_ver = (etree.
+                           SubElement(md_node,
+                                      '{{{md}}}document-version'.format(**ns)))
+                doc_ver.text = metadata['version']
+            if md_node.xpath('/md:document-hash', namespaces=ns) == []:
+                doc_hash = (etree.
+                            SubElement(md_node,
+                                       '{{{md}}}document-hash'.format(**ns)))
+                doc_hash.text = '{id}@{version}'.format(**metadata)
             filepath.write_bytes(etree.tostring(xml, encoding='utf-8',
                                                 xml_declaration=True,
                                                 pretty_print=True))

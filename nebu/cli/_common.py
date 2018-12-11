@@ -89,31 +89,35 @@ def get_base_url_from_url(url):
 
     settings_url = urlunparse(settings_pr)
     # Fetch the JS, chop out the definition
-    s = requests.get(settings_url).text
-    s = s[s.find('return ') + 7:]
-    # we now point at the { after the return
-    # Find the other end of the nested json structure.
-    lvl = 0
-    for i, c in enumerate(s):
-        if c == '{':
-            lvl += 1
-        elif c == '}':
-            lvl -= 1
-        if lvl == 0:  # First char was a {, so doesn't just fall through
-            break
-    # Fixup quoting of everything, remove comment and blank lines
-    set_str = ' '.join([line for line in
-                        re.sub("'", '"',
-                               re.sub(r'(\w+):', r'"\1":',
-                                      re.sub(r': ([a-zA-Z._]+)', r': "\1"',
-                                             s[:i + 1]))).split('\n')
-                        if '//' not in line and line != ''])
-    settings = json.loads(set_str)
-    if 'port' in settings['cnxarchive']:
-        host = 'https://{host}:{port}'.format(**settings['cnxarchive'])
+    resp = requests.get(settings_url)
+    if resp:
+        s = resp.text
+        s = s[s.find('return ') + 7:]
+        # we now point at the { after the return
+        # Find the other end of the nested json structure.
+        lvl = 0
+        for i, c in enumerate(s):
+            if c == '{':
+                lvl += 1
+            elif c == '}':
+                lvl -= 1
+            if lvl == 0:  # First char was a {, so doesn't just fall through
+                break
+        # Fixup quoting of everything, remove comment and blank lines
+        set_str = ' '.join([line for line in
+                            re.sub("'", '"',
+                                   re.sub(r'(\w+):', r'"\1":',
+                                          re.sub(r': ([a-zA-Z._]+)', r': "\1"',
+                                                 s[:i + 1]))).split('\n')
+                            if '//' not in line and line != ''])
+        settings = json.loads(set_str)
+        if 'port' in settings['cnxarchive']:
+            host = 'https://{host}:{port}'.format(**settings['cnxarchive'])
+        else:
+            host = 'https://{host}'.format(**settings['cnxarchive'])
+        return host
     else:
-        host = 'https://{host}'.format(**settings['cnxarchive'])
-    return host
+        return url
 
 
 def set_verbosity(verbose):
