@@ -9,13 +9,11 @@ from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
 from ..logger import logger
-
 from ._common import (common_params,
                       confirm,
                       get_base_url,
                       get_base_url_from_url,
                       )
-
 from .exceptions import (MissingContent,
                          ExistingOutputDir,
                          OldContent,
@@ -30,13 +28,14 @@ from .exceptions import (MissingContent,
               help="create human-friendly book-tree")
 @click.option('-r', '--get-resources', is_flag=True, default=False,
               help="Also get all resources (images)")
+@click.option('-b', '--get_baked', is_flag=True, default=False,
+              help="fetch baked version of content")
 @click.argument('target', nargs=-1)
 @click.pass_context
-def get(ctx, target, output_dir, book_tree, get_resources):
+def get(ctx, target, output_dir, book_tree, get_resources, get_baked):
     """download and expand the completezip to the current working directory"""
 
     version = None
-
     if len(target) == 1:  # target as url
         base_url = get_base_url_from_url(target[0])
         content_path = urlparse(target[0]).path.split(':')[0]
@@ -61,32 +60,36 @@ def get(ctx, target, output_dir, book_tree, get_resources):
     if resp.status_code >= 400:
         raise MissingContent(target)
     col_metadata = resp.json()
-    if col_metadata['collated']:
-        url = resp.url + '?as_collated=False'
-        resp = requests.get(url)
-        if resp.status_code >= 400:
-            # This should never happen - indicates that only baked exists?
-            raise MissingContent(target)
-        col_metadata = resp.json()
+
+    if get_baked and not col_metadata['collated']:
+        raise MissingContent(target)
+
     uuid = col_metadata['id']
-    # metadata fetch used legacy IDs, so will only have
+    url = resp.url
+
+    # Initial metadata fetch used legacy IDs, so will only have
     # the latest minor version - if "version" is set, the
     # user requested an explicit minor (3 part version: 1.X.Y)
     # refetch metadata, using uuid and requested version
     if version and version != col_metadata['version']:
-        url = '{}/contents/{}@{}'.format(base_url, uuid, version) + \
-              '?as_collated=False'
+        url = '{}/contents/{}@{}'.format(base_url, uuid, version)
+
+    # Are we baked? Did the user ask for baked? Fix it.
+    if col_metadata['collated'] and not get_baked:
+        url += '?as_collated=False'
+
+    if url != resp.url:
         resp = requests.get(url)
-        if resp.status_code >= 400:  # Requested version doesn't exist
+        # Requested version, or raw (!) doesn't exist
+        if resp.status_code >= 400:
             raise MissingContent(target)
         col_metadata = resp.json()
-    else:
-        version = col_metadata['version']
 
+    version = col_metadata['version']
     col_id = col_metadata['legacy_id']
     col_version = col_metadata['legacy_version']
 
-    version = col_metadata['version']
+    book_id = '{}@{}'.format(uuid, version)
 
     # Generate full output dir as soon as we have the version
     if output_dir is None:
@@ -135,7 +138,8 @@ def get(ctx, target, output_dir, book_tree, get_resources):
                            label=label,
                            width=0,
                            show_pos=True) as pbar:
-        _write_node(tree, base_url, output_dir, book_tree, get_resources, pbar)
+        _write_node(tree, base_url, output_dir, book_tree,
+                    get_resources, book_id, pbar)
 
 
 def _count_leaves(node):
@@ -153,10 +157,14 @@ def _tree_depth(node):
 
 
 filename_by_type = {'application/vnd.org.cnx.collection': 'collection.xml',
-                    'application/vnd.org.cnx.module': 'index.cnxml'}
+                    'application/vnd.org.cnx.module': 'index.cnxml',
+                    'application/vnd.org.cnx.composite-module': None,
+                    }
 
 
 def _safe_name(name):
+    n = etree.XML('<n>{}</n>'.format(name))
+    name = ''.join([t for t in n.itertext()])
     return name.replace('/', '∕').replace(':', '∶')
 
 
@@ -168,7 +176,7 @@ def gen_resources_sha1_cache(write_dir, resources):
 
 
 def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
-                pbar=None, depth=None, pos={0: 0}, lvl=0):
+                book_id=None, pbar=None, depth=None, pos={0: 0}, lvl=0):
     """Recursively write out contents of a book
        Arguments are:
         root of the json tree, archive url to fetch from, existing directory
@@ -193,40 +201,55 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
     write_dir = out_dir  # Allows nesting only for book_tree case
 
     # Fetch and store the core file for each node
-    resp = requests.get('{}/contents/{}'.format(base_url, node['id']))
+    if book_id is not None:
+        my_id = '{}:{}'.format(book_id, node['id'])
+    else:
+        my_id = node['id']
+    resp = requests.get('{}/contents/{}'.format(base_url, my_id))
     if resp:  # Subcollections cannot (yet) be fetched directly
         metadata = resp.json()
         resources = {r['filename']: r for r in metadata['resources']}
         filename = filename_by_type[metadata['mediaType']]
-        url = '{}/resources/{}'.format(base_url, resources[filename]['id'])
-        file_resp = requests.get(url)
-        if not(book_tree) and filename == 'index.cnxml':
+        if not(book_tree) and filename != 'collection.xml':
             write_dir = write_dir / metadata['legacy_id']
             os.mkdir(str(write_dir))
-        filepath = write_dir / filename
 
         """Cache/store sha1-s for resources in a 'dot' file"""
         gen_resources_sha1_cache(write_dir, metadata['resources'])
 
-        # core files are XML - this parse/serialize removes numeric entities
-        # FIXME hackery to extend MDML w/ uuid info
-        xml = etree.XML(file_resp.text)
-        ns = xml.nsmap
-        ns['default'] = ns.pop(None)
-        md_node = xml.xpath('//default:metadata', namespaces=ns)[0]
-        doc_uuid = etree.SubElement(md_node,
-                                    '{{{md}}}document-uuid'.format(**ns))
-        doc_uuid.text = metadata['id']
-        doc_ver = etree.SubElement(md_node,
-                                   '{{{md}}}document-version'.format(**ns))
-        doc_ver.text = metadata['version']
-        doc_hash = etree.SubElement(md_node,
-                                    '{{{md}}}document-hash'.format(**ns))
-        doc_hash.text = '{id}@{version}'.format(**metadata)
-        filepath.write_bytes(etree.tostring(xml, encoding='utf-8',
-                                            pretty_print=True))
+        if filename:  # baked CompositeModules have no CNXML file
+            url = '{}/resources/{}'.format(base_url, resources[filename]['id'])
+            file_resp = requests.get(url)
+            filepath = write_dir / filename
+            # core files are XML - parse/serialize removes numeric entities
+            # FIXME HACK hackery to extend MDML w/ uuid info, for use by
+            # `push` subcommand
+            xml = etree.XML(file_resp.text)
+            ns = xml.nsmap
+            ns['default'] = ns.pop(None)  # Could be cnxml or collxml
+            md_node = xml.xpath('//default:metadata', namespaces=ns)[0]
+            doc_uuid = etree.SubElement(md_node,
+                                        '{{{md}}}document-uuid'.format(**ns))
+            doc_uuid.text = metadata['id']
+            doc_ver = etree.SubElement(md_node,
+                                       '{{{md}}}document-version'.format(**ns))
+            doc_ver.text = metadata['version']
+            doc_hash = etree.SubElement(md_node,
+                                        '{{{md}}}document-hash'.format(**ns))
+            doc_hash.text = '{id}@{version}'.format(**metadata)
+            filepath.write_bytes(etree.tostring(xml, encoding='utf-8',
+                                                xml_declaration=True,
+                                                pretty_print=True))
+        if 'content' in metadata:
+            filename = 'index.xhtml'
+            filepath = write_dir / filename
+            xml = etree.XML(metadata['content'])
+            filepath.write_bytes(etree.tostring(xml, encoding='utf-8',
+                                                xml_declaration=True,
+                                                pretty_print=True))
+
         if get_resources:
-            for res in resources:  # Dict keyed by resource filename
+            for res in resources:
                 if res != filename:
                     filepath = write_dir / res
                     url = '{}/resources/{}'.format(base_url,
@@ -251,4 +274,4 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
             else:
                 pos[lvl] += 1
             _write_node(child, base_url, out_dir, book_tree, get_resources,
-                        pbar, depth, pos, lvl)
+                        book_id, pbar, depth, pos, lvl)
