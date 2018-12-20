@@ -1,4 +1,5 @@
 from functools import wraps
+import hashlib
 
 import click
 import json
@@ -90,8 +91,8 @@ def get_base_url_from_url(url):
     settings_url = urlunparse(settings_pr)
     # Fetch the JS, chop out the definition
     s = requests.get(settings_url).text
-    s = s[s.find('return ') + 7:]
-    # we now point at the { after the return
+    s = s[s.find('cnxarchive:') + 12:]
+    # we now point at the { after the cnxarchive element
     # Find the other end of the nested json structure.
     lvl = 0
     for i, c in enumerate(s):
@@ -109,10 +110,11 @@ def get_base_url_from_url(url):
                                              s[:i + 1]))).split('\n')
                         if '//' not in line and line != ''])
     settings = json.loads(set_str)
-    if 'port' in settings['cnxarchive']:
-        host = 'https://{host}:{port}'.format(**settings['cnxarchive'])
+    settings['scheme'] = settings_pr.scheme
+    if 'port' in settings:
+        host = '{scheme}://{host}:{port}'.format(**settings)
     else:
-        host = 'https://{host}'.format(**settings['cnxarchive'])
+        host = '{scheme}://{host}'.format(**settings)
     return host
 
 
@@ -124,3 +126,9 @@ def set_verbosity(verbose):
         level = 'INFO'
     config['loggers']['nebuchadnezzar']['level'] = level
     configure_logging(config)
+
+
+def calculate_sha1(fpath):
+    sha1 = hashlib.sha1()
+    sha1.update(fpath.open('rb').read())
+    return sha1.hexdigest()

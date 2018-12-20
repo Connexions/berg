@@ -65,6 +65,7 @@ def get(ctx, target, output_dir, book_tree):
     else:
         version = col_metadata['version']
 
+    col_id = col_metadata['legacy_id']
     # Generate full output dir as soon as we have the version
     if output_dir is None:
         output_dir = Path.cwd() / '{}_1.{}'.format(col_id, version)
@@ -137,6 +138,13 @@ def _safe_name(name):
     return name.replace('/', '∕').replace(':', '∶')
 
 
+def gen_resources_sha1_cache(write_dir, resources):
+    for resource in resources:
+        with (write_dir / '.sha1sum').open('a') as s:
+            # NOTE: the id is the sha1
+            s.write('{} {}\n'.format(resource['id'], resource['filename']))
+
+
 def _write_node(node, base_url, out_dir, book_tree=False,
                 pbar=None, depth=None, pos={0: 0}, lvl=0):
     """Recursively write out contents of a book
@@ -174,8 +182,12 @@ def _write_node(node, base_url, out_dir, book_tree=False,
             write_dir = write_dir / metadata['legacy_id']
             os.mkdir(str(write_dir))
         filepath = write_dir / filename
+
+        """Cache/store sha1-s for resources in a 'dot' file"""
+        gen_resources_sha1_cache(write_dir, metadata['resources'])
+
         # core files are XML - this parse/serialize removes numeric entities
-        filepath.write_bytes(etree.tostring(etree.XML(file_resp.text),
+        filepath.write_bytes(etree.tostring(etree.XML(file_resp.content),
                                             encoding='utf-8',
                                             xml_declaration=True))
         if pbar is not None:
