@@ -41,16 +41,18 @@ def get(ctx, target, output_dir, book_tree):
             full_version = col_version.split('.')
             col_version = '.'.join(full_version[:2])
             version = '.'.join(full_version[1:])
+        else:
+            version = None
 
         col_hash = '{}/{}'.format(col_id, col_version)
         url = '{}/content/{}'.format(base_url, col_hash)
     else:
-        raise ValueError("Wrong number of params")
+        raise click.UsageError("Wrong number of arguments", ctx=ctx)
 
     # Fetch metadata
     resp = requests.get(url)
     if resp.status_code >= 400:
-        raise MissingContent(target)
+        raise MissingContent(url)
     col_metadata = resp.json()
     if col_metadata['collated']:
         url = resp.url + '?as_collated=False'

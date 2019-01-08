@@ -42,6 +42,14 @@ class TestGetCmd:
         base_url = 'https://archive.cnx.org'
         metadata_url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
         extras_url = '{}/extras/{}'.format(base_url, col_hash)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         # Register the data urls
         for fname, url in (('contents.json', metadata_url),
@@ -93,6 +101,14 @@ class TestGetCmd:
         base_url = 'https://archive.cnx.org'
         metadata_url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
         extras_url = '{}/extras/{}'.format(base_url, col_hash)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         # Register the data urls
         for fname, url in (('contents.json', metadata_url),
@@ -143,6 +159,14 @@ class TestGetCmd:
         base_url = 'https://archive.cnx.org'
         metadata_url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
         extras_url = '{}/extras/{}'.format(base_url, col_hash)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         # Register the data urls
         for fname, url in (('contents.json', metadata_url),
@@ -195,6 +219,14 @@ class TestGetCmd:
         metadata_url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
         extras_url = '{}/extras/{}'.format(base_url, col_hash)
         latest_url = '{}/extras/{}@{}'.format(base_url, col_uuid, col_latest)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         # Register the data urls
         for fname, url in (('contents_old.json', metadata_url),
@@ -246,6 +278,14 @@ class TestGetCmd:
         metadata_url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
         extras_url = '{}/extras/{}'.format(base_url, col_hash)
         latest_url = '{}/extras/{}@{}'.format(base_url, col_uuid, col_latest)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         # Register the data urls
         for fname, url in (('contents_old.json', metadata_url),
@@ -298,6 +338,14 @@ class TestGetCmd:
         metadata_url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
         extras_url = '{}/extras/{}'.format(base_url, col_hash)
         latest_url = '{}/extras/{}@{}'.format(base_url, col_uuid, col_latest)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         # Register the data urls
         for fname, url in (('contents_old.json', metadata_url),
@@ -325,6 +373,14 @@ class TestGetCmd:
         base_url = 'https://archive.cnx.org'
         metadata_url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
         extras_url = '{}/extras/{}'.format(base_url, col_hash)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         # Register the data urls
         for fname, url in (('contents.json', metadata_url),
@@ -368,13 +424,30 @@ class TestGetCmd:
 
     def test_with_existing_output_dir(self, tmpcwd, invoker, requests_mock,
                                       datadir):
-        col_id = 'col00000'
-        col_version = '2.1'
-        base_url = 'https://archive.cnx.org'
-        url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
 
-        # Register the metadata url
-        register_data_file(requests_mock, datadir, 'contents.json', url)
+        col_id = 'col11405'
+        col_version = '2.1'
+        col_uuid = 'b699648f-405b-429f-bf11-37bad4246e7c'
+        col_hash = '{}@{}'.format(col_uuid, '2.1')
+        base_url = 'https://archive.cnx.org'
+        metadata_url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
+        hash_url = '{}/contents/{}'.format(base_url, col_hash)
+        extras_url = '{}/extras/{}'.format(base_url, col_hash)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
+
+        # Register the data urls
+        for fname, url in (('contents.json', metadata_url),
+                           ('contents.json', hash_url),
+                           ('extras.json', extras_url),
+                           ):
+            register_data_file(requests_mock, datadir, fname, url)
 
         expected_output_dir = '{}_1.{}'.format(col_id, col_version)
         (tmpcwd / expected_output_dir).mkdir()
@@ -396,13 +469,21 @@ class TestGetCmd:
 
         assert result.exit_code == 2
 
-        assert 'Missing argument "COL_VERSION"' in result.output
+        assert 'Wrong number of arguments' in result.output
 
     def test_failed_request_using_version(self, requests_mock, invoker):
         col_id = 'col00000'
         col_ver = '1.19'
         content_url = 'https://archive.cnx.org/content/{}/{}'.format(col_id,
                                                                      col_ver)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         requests_mock.get(content_url, status_code=404)
 
@@ -412,5 +493,5 @@ class TestGetCmd:
 
         assert result.exit_code == 4
 
-        msg = "content unavailable for '{}/{}'".format(col_id, col_ver)
+        msg = "content unavailable for '{}'".format(content_url)
         assert msg in result.output

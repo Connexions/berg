@@ -20,8 +20,8 @@ class ExistingOutputDir(click.ClickException):
 class MissingContent(click.ClickException):
     exit_code = 4
 
-    def __init__(self, id, version):
-        message = "content unavailable for '{}/{}'".format(id, version)
+    def __init__(self, target):
+        message = "content unavailable for '{}'".format(target)
         super(MissingContent, self).__init__(message)
 
 
