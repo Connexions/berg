@@ -83,7 +83,10 @@ def _version_callback(ctx, param, value):
     ctx.exit()
 
 
-@click.group()
+CONTEXT_SETTINGS = dict(help_option_names=['--help', '-h'])
+
+
+@click.group(context_settings=CONTEXT_SETTINGS)
 @click.option('--version', callback=_version_callback, is_flag=True,
               expose_value=False, is_eager=True,
               help='Show the version and exit')

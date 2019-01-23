@@ -206,13 +206,17 @@ def _publish(base_url, struct, message, username, password):
 @click.argument('content_dir',
                 type=click.Path(exists=True, file_okay=False))
 @click.option('-m', '--message', type=str,
-              prompt='Publication message')
-@click.option('-u', '--username', type=str, prompt=True)
+              prompt='Publication message', help="publication message")
+@click.option('-u', '--username', type=str, prompt=True,
+              help="user with publishing permission")
 @click.option('-p', '--password', type=str, prompt=True, hide_input=True)
-@click.option('--skip-validation', is_flag=True)
+@click.option('--skip-validation', is_flag=True,
+              help="Do not validate before publishing"
+                   " (server will still validate)")
 @click.pass_context
 def publish(ctx, env, content_dir, message, username, password,
             skip_validation):
+    """Publish a book"""
     base_url = get_base_url(ctx, env)
 
     content_dir = Path(content_dir).resolve()

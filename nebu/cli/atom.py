@@ -49,6 +49,7 @@ _ATOM_CONFIG_TEMPLATE = """\
 @common_params
 @click.confirmation_option(prompt=_confirmation_prompt)
 def config_atom():
+    """Provide a default atom editor validation config"""
     filepath = Path.home() / '.atom/config.cson'
     if not filepath.parent.exists():
         filepath.parent.mkdir()

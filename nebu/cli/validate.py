@@ -34,6 +34,7 @@ def is_valid(struct):
 @click.argument('content_dir', default='.',
                 type=click.Path(exists=True, file_okay=False))
 def validate(content_dir):
+    """Validate the format of the book content"""
     content_dir = Path(content_dir).resolve()
     struct = parse_litezip(content_dir)
 

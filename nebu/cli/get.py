@@ -21,13 +21,13 @@ from .exceptions import (MissingContent,
 @click.option('-t', '--book-tree', is_flag=True,
               help="create human-friendly book-tree")
 @click.option('-r', '--get-resources', is_flag=True, default=False,
-              help="Also get all resources (images)")
+              help="Get all resources (images) in addition to source")
 @click.argument('env')
 @click.argument('col_id')
 @click.argument('col_version')
 @click.pass_context
 def get(ctx, env, col_id, col_version, output_dir, book_tree, get_resources):
-    """download and expand the completezip to the current working directory"""
+    """Retrieve the contents of a book, onto the local file system"""
 
     base_url = build_archive_url(ctx, env)
 
