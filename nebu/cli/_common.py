@@ -92,8 +92,8 @@ def get_base_url_from_url(url):
     resp = requests.get(settings_url)
     if resp:
         s = resp.text
-        s = s[s.find('return ') + 7:]
-        # we now point at the { after the return
+        s = s[s.find('cnxarchive:') + 12:]
+        # we now point at the { after the cnxarchive element
         # Find the other end of the nested json structure.
         lvl = 0
         for i, c in enumerate(s):
@@ -111,11 +111,12 @@ def get_base_url_from_url(url):
                                                  s[:i + 1]))).split('\n')
                             if '//' not in line and line != ''])
         settings = json.loads(set_str)
-        if 'port' in settings['cnxarchive']:
-            host = 'https://{host}:{port}'.format(**settings['cnxarchive'])
+        settings['scheme'] = settings_pr.scheme
+        if 'port' in settings:
+            host = '{scheme}://{host}:{port}'.format(**settings)
         else:
-            host = 'https://{host}'.format(**settings['cnxarchive'])
-        return host
+            host = '{scheme}://{host}'.format(**settings)
+            return host
     else:
         return url
 
