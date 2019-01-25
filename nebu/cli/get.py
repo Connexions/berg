@@ -61,11 +61,11 @@ def get(ctx, target, output_dir, book_tree, get_resources, get_baked):
     # Fetch metadata
     resp = requests.get(url)
     if resp.status_code >= 400:
-        raise MissingContent(url)
+        raise MissingContent('/'.join(target))
     col_metadata = resp.json()
 
     if get_baked and not col_metadata['collated']:
-        raise MissingBakedContent(target)
+        raise MissingBakedContent('/'.join(target))
 
     uuid = col_metadata['id']
     url = resp.url
@@ -85,7 +85,7 @@ def get(ctx, target, output_dir, book_tree, get_resources, get_baked):
         resp = requests.get(url)
         # Requested version, or raw (!) doesn't exist
         if resp.status_code >= 400:
-            raise MissingContent(target)
+            raise MissingContent('/'.join(target))
         col_metadata = resp.json()
 
     version = col_metadata['version']
@@ -111,7 +111,7 @@ def get(ctx, target, output_dir, book_tree, get_resources, get_baked):
     resp = requests.get(url)
 
     # Latest defaults to successfully baked - we need headVersion
-    if col_version == 'latest' or col_version is None:
+    if not(get_baked) and col_version == 'latest':
         version = resp.json()['headVersion']
         url = '{}/extras/{}@{}'.format(base_url, uuid, version)
         resp = requests.get(url)
@@ -132,17 +132,19 @@ def get(ctx, target, output_dir, book_tree, get_resources, get_baked):
     os.mkdir(str(output_dir))
 
     num_pages = _count_leaves(tree) + 1  # Num. of xml files to fetch
+
     try:
         label = 'Getting {}'.format(output_dir.relative_to(Path.cwd()))
     except ValueError:
         # Raised ONLY when output_dir is not a child of cwd
         label = 'Getting {}'.format(output_dir)
+
     with click.progressbar(length=num_pages,
                            label=label,
                            width=0,
                            show_pos=True) as pbar:
         _write_node(tree, base_url, output_dir, book_tree,
-                    get_resources, book_id, pbar)
+                    get_resources, book_id if get_baked else None, pbar)
 
 
 def _count_leaves(node):
@@ -254,7 +256,7 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
             filepath.write_bytes(etree.tostring(xml, encoding='utf-8',
                                                 xml_declaration=True,
                                                 pretty_print=True))
-        if 'content' in metadata:
+        if (book_id or get_resources) and 'content' in metadata:
             filename = 'index.xhtml'
             filepath = write_dir / filename
             xml = etree.XML(metadata['content'])

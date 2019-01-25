@@ -42,7 +42,17 @@ class TestGetCmd:
         base_url = 'https://archive.cnx.org'
         metadata_url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
         extras_url = '{}/extras/{}'.format(base_url, col_hash)
+        contents_url = '{}/contents/{}'.format(base_url, col_hash)
+        baked_url = '{}/contents/{}:{}'.format(base_url, col_hash, col_hash)
         settings_url = 'https://cnx.org/scripts/settings.js'
+
+        requests_mock.get(metadata_url,
+                          status_code=301,
+                          headers={'location': contents_url})
+
+        requests_mock.get(baked_url,
+                          status_code=301,
+                          headers={'location': contents_url})
 
         # Register settings fragment
         requests_mock.get(
@@ -99,6 +109,14 @@ class TestGetCmd:
         base_url = 'https://archive.cnx.org'
         metadata_url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
         extras_url = '{}/extras/{}'.format(base_url, col_hash)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         # Register the data urls
         for fname, url in (('contents.json', metadata_url),
@@ -151,6 +169,14 @@ class TestGetCmd:
         metadata_url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
         extras_url = '{}/extras/{}'.format(base_url, col_hash)
         extra_extras_url = '{}/extras/{}@{}'.format(base_url, col_uuid, '1.1')
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         # Register the data urls
         for fname, url in (('contents_1.4.json', metadata_url),
@@ -207,6 +233,14 @@ class TestGetCmd:
         metadata_url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
         extras_url = '{}/extras/{}'.format(base_url, col_hash)
         extra_extras_url = '{}/extras/{}@{}'.format(base_url, col_uuid, '1.1')
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         # Register the data urls
         for fname, url in (('contents_1.4.json', metadata_url),
@@ -226,7 +260,8 @@ class TestGetCmd:
 
         assert result.exit_code == 4
 
-        msg = "content unavailable for '{}/{}'".format(col_id, trip_ver)
+        msg = "content unavailable for 'test-env/{}/{}'".format(col_id,
+                                                                trip_ver)
         assert msg in result.output
 
     def test_outside_cwd(self, datadir, tmpcwd, monkeypatch, requests_mock,
@@ -631,7 +666,8 @@ class TestGetCmd:
 
         assert result.exit_code == 4
 
-        msg = "content unavailable for '{}'".format(content_url)
+        msg = "content unavailable for 'test-env/{}/{}'".format(col_id,
+                                                                col_ver)
         assert msg in result.output
 
     def test_failed_request_no_raw(self, datadir, requests_mock, invoker):
@@ -644,6 +680,14 @@ class TestGetCmd:
         extras_url = '{}/extras/{}'.format(base_url, col_hash)
         contents_url = '{}/contents/{}'.format(base_url, col_hash)
         raw_url = '{}/contents/{}?as_collated=False'.format(base_url, col_hash)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         # Register the data urls
         for fname, url in (('contents.json', contents_url),
@@ -663,5 +707,6 @@ class TestGetCmd:
 
         assert result.exit_code == 4
 
-        msg = "content unavailable for '{}/{}'".format(col_id, col_version)
+        msg = "content unavailable for 'test-env/{}/{}'".format(col_id,
+                                                                col_version)
         assert msg in result.output
