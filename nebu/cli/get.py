@@ -238,7 +238,7 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
             ns['default'] = ns.pop(None)  # Could be cnxml or collxml
             ns['md'] = 'http://cnx.rice.edu/mdml'
             md_node = xml.xpath('//default:metadata', namespaces=ns)[0]
-            if md_node.xpath('/md:document-id', namespaces=ns) == []:
+            if md_node.xpath('/md:document-uuid', namespaces=ns) == []:
                 doc_uuid = (etree.
                             SubElement(md_node,
                                        '{{{md}}}document-uuid'.format(**ns)))
@@ -257,8 +257,8 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
                                                 xml_declaration=True,
                                                 pretty_print=True))
         if (book_id or get_resources) and 'content' in metadata:
-            filename = 'index.xhtml'
-            filepath = write_dir / filename
+            content_filename = 'index.xhtml'
+            filepath = write_dir / content_filename
             xml = etree.XML(metadata['content'])
             filepath.write_bytes(etree.tostring(xml, encoding='utf-8',
                                                 xml_declaration=True,
