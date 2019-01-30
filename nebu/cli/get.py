@@ -29,11 +29,14 @@ from .exceptions import (MissingContent,
               help="create human-friendly book-tree")
 @click.option('-r', '--get-resources', is_flag=True, default=False,
               help="Also get all resources (images)")
-@click.option('-b', '--get_baked', is_flag=True, default=False,
+@click.option('-H', '--get-html', is_flag=True, default=False,
+              help="Also get HTML")
+@click.option('-b', '--get-baked', is_flag=True, default=False,
               help="fetch baked version of content")
 @click.argument('target', nargs=-1)
 @click.pass_context
-def get(ctx, target, output_dir, book_tree, get_resources, get_baked):
+def get(ctx, target, output_dir, book_tree,
+        get_resources, get_html, get_baked):
     """download and expand the completezip to the current working directory"""
 
     version = None
@@ -143,7 +146,7 @@ def get(ctx, target, output_dir, book_tree, get_resources, get_baked):
                            label=label,
                            width=0,
                            show_pos=True) as pbar:
-        _write_node(tree, base_url, output_dir, book_tree,
+        _write_node(tree, base_url, output_dir, book_tree, get_html,
                     get_resources, book_id if get_baked else None, pbar)
 
 
@@ -180,8 +183,9 @@ def gen_resources_sha1_cache(write_dir, resources):
             s.write('{}  {}\n'.format(resource['id'], resource['filename']))
 
 
-def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
-                book_id=None, pbar=None, depth=None, pos={0: 0}, lvl=0):
+def _write_node(node, base_url, out_dir, book_tree=False, get_html=False,
+                get_resources=False, book_id=None,
+                pbar=None, depth=None, pos={0: 0}, lvl=0):
     """Recursively write out contents of a book
        Arguments are:
         root of the json tree, archive url to fetch from, existing directory
@@ -256,7 +260,7 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
             filepath.write_bytes(etree.tostring(xml, encoding='utf-8',
                                                 xml_declaration=True,
                                                 pretty_print=True))
-        if (book_id or get_resources) and 'content' in metadata:
+        if (book_id or get_html) and 'content' in metadata:
             content_filename = 'index.xhtml'
             filepath = write_dir / content_filename
             xml = etree.XML(metadata['content'])
@@ -265,6 +269,8 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
                                                 pretty_print=True))
 
         if get_resources:
+            num_res = len(resources)
+            tru_pos = 0
             for res in resources:
                 if res != filename:
                     filepath = write_dir / res
@@ -273,7 +279,12 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
                     file_resp = requests.get(url)
                     filepath.write_bytes(file_resp.content)
 
-        if pbar is not None:
+                if pbar is not None:
+                    tru_pos += (1.0 / num_res)
+
+                    pbar.update(1.0 / num_res)
+
+        elif pbar is not None:
             pbar.update(1)
 
     if 'contents' in node:  # Top-level or subcollection - recurse
@@ -289,5 +300,5 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
                 pos[lvl] = 0
             else:
                 pos[lvl] += 1
-            _write_node(child, base_url, out_dir, book_tree, get_resources,
-                        book_id, pbar, depth, pos, lvl)
+            _write_node(child, base_url, out_dir, book_tree, get_html,
+                        get_resources, book_id, pbar, depth, pos, lvl)
