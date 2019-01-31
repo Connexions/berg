@@ -181,7 +181,7 @@ def _safe_name(name):
 
 
 def gen_resources_sha1_cache(write_dir, resources):
-    for resource in resources:
+    for resource in resources.values():
         with (write_dir / '.sha1sum').open('a') as s:
             # NOTE: the id is the sha1
             s.write('{}  {}\n'.format(resource['id'], resource['filename']))
@@ -221,14 +221,23 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_html=False,
     resp = requests.get('{}/contents/{}'.format(base_url, my_id))
     if resp:  # Subcollections cannot (yet) be fetched directly
         metadata = resp.json()
-        resources = {r['filename']: r for r in metadata['resources']}
+
+        """index.cnxml.html files should not be edited nor published (they are
+        generated and regenerated in-place in the database), so let's just
+        not consider them as resources (or download them) at all.
+        """
+        # skip index.cnxml.html
+        resources = {res['filename']: res for res in metadata['resources']
+                     if res['filename'] != 'index.cnxml.html'}
+
+        # Deal with core XML file and output directory
         filename = filename_by_type[metadata['mediaType']]
         if not(book_tree) and filename != 'collection.xml':
             write_dir = write_dir / metadata['legacy_id']
             os.mkdir(str(write_dir))
 
-        """Cache/store sha1-s for resources in a 'dot' file"""
-        gen_resources_sha1_cache(write_dir, metadata['resources'])
+        # Cache/store sha1-s for resources in a 'dot' file
+        gen_resources_sha1_cache(write_dir, resources)
 
         if filename:  # baked CompositeModules have no CNXML file
             url = '{}/resources/{}'.format(base_url, resources[filename]['id'])
