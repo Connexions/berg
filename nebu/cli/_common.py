@@ -8,6 +8,13 @@ from ..logger import configure_logging, logger
 from .exceptions import UnknownEnvironment
 
 
+COLLECTION_TYPE = 'application/vnd.org.cnx.collection'
+MODULE_TYPE = 'application/vnd.org.cnx.module'
+
+filename_by_type = {COLLECTION_TYPE: 'collection.xml',
+                    MODULE_TYPE: 'index.cnxml'}
+
+
 console_logging_config = {
     'version': 1,
     'formatters': {

@@ -7,7 +7,12 @@ from lxml import etree
 from pathlib import Path
 
 from ..logger import logger
-from ._common import common_params, confirm, build_archive_url
+from ._common import (common_params, confirm,
+                      build_archive_url,
+                      COLLECTION_TYPE,
+                      # MODULE_TYPE,
+                      filename_by_type,
+                      )
 from .exceptions import (MissingContent,
                          ExistingOutputDir,
                          OldContent,
@@ -45,7 +50,8 @@ def get(ctx, env, col_id, col_version, output_dir, book_tree, get_resources):
     if resp.status_code >= 400:
         raise MissingContent(col_id, req_version)
     col_metadata = resp.json()
-    if col_metadata['collated']:
+    if (col_metadata['mediaType'] == COLLECTION_TYPE and
+            col_metadata['collated']):
         url = resp.url + '?as_collated=False'
         resp = requests.get(url)
         if resp.status_code >= 400:
@@ -101,7 +107,12 @@ def get(ctx, env, col_id, col_version, output_dir, book_tree, get_resources):
             raise OldContent()
 
     # Write tree
-    tree = col_metadata['tree']
+    if col_metadata['mediaType'] == COLLECTION_TYPE:
+        tree = col_metadata['tree']
+    else:  # need to build a one-node tree for Module
+        tree = {"id": "{id}@{version}".format(**col_metadata),
+                "title": col_metadata['title']
+                }
     os.mkdir(str(output_dir))
 
     num_pages = _count_leaves(tree) + 1  # Num. of xml files to fetch
@@ -129,10 +140,6 @@ def _tree_depth(node):
         return max([_tree_depth(child) for child in node['contents']]) + 1
     else:
         return 0
-
-
-filename_by_type = {'application/vnd.org.cnx.collection': 'collection.xml',
-                    'application/vnd.org.cnx.module': 'index.cnxml'}
 
 
 def _safe_name(name):

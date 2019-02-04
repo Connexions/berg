@@ -584,3 +584,195 @@ class TestGetCmd:
 
         msg = "content unavailable for '{}/{}'".format(col_id, col_version)
         assert msg in result.output
+
+    def test_module(self, datadir, tmpcwd, requests_mock, invoker):
+        mod_id = 'm37151'
+        mod_version = '1.5'
+        mod_uuid = '06ca2321-54e8-4f28-8516-f38c8e39cac7'
+        mod_hash = '{}@{}'.format(mod_uuid, '5')
+        base_url = 'https://archive.cnx.org'
+        metadata_url = '{}/content/{}/{}'.format(base_url, mod_id, mod_version)
+        contents_url = '{}/contents/{}'.format(base_url, mod_hash)
+        extras_url = '{}/extras/{}'.format(base_url, mod_hash)
+
+        requests_mock.get(metadata_url,
+                          status_code=301,
+                          headers={'location': contents_url})
+
+        # Register the extras url
+        register_data_file(requests_mock, datadir,
+                           'mod_extras.json', extras_url)
+
+        # Register the resources
+        resdir = datadir / 'resources'
+        for res in resdir.glob('*'):
+            url = '{}/resources/{}'.format(base_url, res.relative_to(resdir))
+            register_data_file(requests_mock, resdir, res, url)
+
+        # Register contents
+        condir = datadir / 'contents'
+        for con in condir.glob('*'):
+            url = '{}/contents/{}'.format(base_url, con.relative_to(condir))
+            register_data_file(requests_mock, condir, con, url)
+
+        from nebu.cli.main import cli
+        args = ['get', 'test-env', mod_id, mod_version]
+        result = invoker(cli, args)
+
+        assert result.exit_code == 0
+
+        dir = tmpcwd / '{}_1.{}'.format(mod_id, '5')
+        expected = datadir / 'module'
+
+        def _rel(p, b):
+            return p.relative_to(b)
+
+        relative_dir = map(partial(_rel, b=dir), pathlib_walk(dir))
+        relative_expected = map(partial(_rel, b=expected),
+                                pathlib_walk(expected))
+        assert sorted(relative_dir) == sorted(relative_expected)
+
+    def test_module_tree(self, datadir, tmpcwd, requests_mock, invoker):
+        mod_id = 'm37151'
+        mod_version = '1.5'
+        mod_uuid = '06ca2321-54e8-4f28-8516-f38c8e39cac7'
+        mod_hash = '{}@{}'.format(mod_uuid, '5')
+        base_url = 'https://archive.cnx.org'
+        metadata_url = '{}/content/{}/{}'.format(base_url, mod_id, mod_version)
+        contents_url = '{}/contents/{}'.format(base_url, mod_hash)
+        extras_url = '{}/extras/{}'.format(base_url, mod_hash)
+
+        requests_mock.get(metadata_url,
+                          status_code=301,
+                          headers={'location': contents_url})
+
+        # Register the extras url
+        register_data_file(requests_mock, datadir,
+                           'mod_extras.json', extras_url)
+
+        # Register the resources
+        resdir = datadir / 'resources'
+        for res in resdir.glob('*'):
+            url = '{}/resources/{}'.format(base_url, res.relative_to(resdir))
+            register_data_file(requests_mock, resdir, res, url)
+
+        # Register contents
+        condir = datadir / 'contents'
+        for con in condir.glob('*'):
+            url = '{}/contents/{}'.format(base_url, con.relative_to(condir))
+            register_data_file(requests_mock, condir, con, url)
+
+        from nebu.cli.main import cli
+        args = ['get', 'test-env', '-t', mod_id, mod_version]
+        result = invoker(cli, args)
+
+        assert result.exit_code == 0
+
+        dir = tmpcwd / '{}_1.{}'.format(mod_id, '5')
+        expected = datadir / 'module_tree'
+
+        def _rel(p, b):
+            return p.relative_to(b)
+
+        relative_dir = map(partial(_rel, b=dir), pathlib_walk(dir))
+        relative_expected = map(partial(_rel, b=expected),
+                                pathlib_walk(expected))
+        assert sorted(relative_dir) == sorted(relative_expected)
+
+    def test_module_resources(self, datadir, tmpcwd, requests_mock, invoker):
+        mod_id = 'm37151'
+        mod_version = '1.5'
+        mod_uuid = '06ca2321-54e8-4f28-8516-f38c8e39cac7'
+        mod_hash = '{}@{}'.format(mod_uuid, '5')
+        base_url = 'https://archive.cnx.org'
+        metadata_url = '{}/content/{}/{}'.format(base_url, mod_id, mod_version)
+        contents_url = '{}/contents/{}'.format(base_url, mod_hash)
+        extras_url = '{}/extras/{}'.format(base_url, mod_hash)
+
+        requests_mock.get(metadata_url,
+                          status_code=301,
+                          headers={'location': contents_url})
+
+        # Register the extras url
+        register_data_file(requests_mock, datadir,
+                           'mod_extras.json', extras_url)
+
+        # Register the resources
+        resdir = datadir / 'resources'
+        for res in resdir.glob('*'):
+            url = '{}/resources/{}'.format(base_url, res.relative_to(resdir))
+            register_data_file(requests_mock, resdir, res, url)
+
+        # Register contents
+        condir = datadir / 'contents'
+        for con in condir.glob('*'):
+            url = '{}/contents/{}'.format(base_url, con.relative_to(condir))
+            register_data_file(requests_mock, condir, con, url)
+
+        from nebu.cli.main import cli
+        args = ['get', 'test-env', '-r', mod_id, mod_version]
+        result = invoker(cli, args)
+
+        assert result.exit_code == 0
+
+        dir = tmpcwd / '{}_1.{}'.format(mod_id, '5')
+        expected = datadir / 'module_resources'
+
+        def _rel(p, b):
+            return p.relative_to(b)
+
+        relative_dir = map(partial(_rel, b=dir), pathlib_walk(dir))
+        relative_expected = map(partial(_rel, b=expected),
+                                pathlib_walk(expected))
+        assert sorted(relative_dir) == sorted(relative_expected)
+
+    def test_module_not_latest(self, datadir, tmpcwd, requests_mock,
+                               monkeypatch, invoker):
+        mod_id = 'm37151'
+        mod_version = '1.4'
+        mod_uuid = '06ca2321-54e8-4f28-8516-f38c8e39cac7'
+        mod_hash = '{}@{}'.format(mod_uuid, '4')
+        base_url = 'https://archive.cnx.org'
+        metadata_url = '{}/content/{}/{}'.format(base_url, mod_id, mod_version)
+        contents_url = '{}/contents/{}'.format(base_url, mod_hash)
+        extras_url = '{}/extras/{}'.format(base_url, mod_hash)
+
+        requests_mock.get(metadata_url,
+                          status_code=301,
+                          headers={'location': contents_url})
+
+        # Register the extras url
+        register_data_file(requests_mock, datadir,
+                           'mod_extras.json', extras_url)
+
+        # Register the resources
+        resdir = datadir / 'resources'
+        for res in resdir.glob('*'):
+            url = '{}/resources/{}'.format(base_url, res.relative_to(resdir))
+            register_data_file(requests_mock, resdir, res, url)
+
+        # Register contents
+        condir = datadir / 'contents'
+        for con in condir.glob('*'):
+            url = '{}/contents/{}'.format(base_url, con.relative_to(condir))
+            register_data_file(requests_mock, condir, con, url)
+
+        # patch input to return 'y'
+        with monkeypatch.context() as m:
+            m.setattr('builtins.input', lambda x: "y")
+            from nebu.cli.main import cli
+            args = ['get', 'test-env', mod_id, mod_version]
+            result = invoker(cli, args)
+
+        assert result.exit_code == 0
+
+        dir = tmpcwd / '{}_1.{}'.format(mod_id, '4')
+        expected = datadir / 'module_old'
+
+        def _rel(p, b):
+            return p.relative_to(b)
+
+        relative_dir = map(partial(_rel, b=dir), pathlib_walk(dir))
+        relative_expected = map(partial(_rel, b=expected),
+                                pathlib_walk(expected))
+        assert sorted(relative_dir) == sorted(relative_expected)
