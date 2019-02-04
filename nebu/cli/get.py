@@ -11,8 +11,11 @@ from urllib.parse import urlparse, urlunparse
 from ..logger import logger
 from ._common import (common_params,
                       confirm,
-                      get_base_url,
+                      COLLECTION_TYPE,
+                      # MODULE_TYPE,
+                      filename_by_type,
                       get_base_url_from_url,
+                      get_base_url,
                       )
 from .exceptions import (MissingContent,
                          MissingBakedContent,
@@ -67,7 +70,8 @@ def get(ctx, target, output_dir, book_tree,
         raise MissingContent('/'.join(target))
     col_metadata = resp.json()
 
-    if get_baked and not col_metadata['collated']:
+    if (col_metadata['mediaType'] == COLLECTION_TYPE and
+            get_baked and not col_metadata['collated']):
         raise MissingBakedContent('/'.join(target))
 
     uuid = col_metadata['id']
@@ -131,7 +135,12 @@ def get(ctx, target, output_dir, book_tree,
             raise OldContent()
 
     # Write tree
-    tree = col_metadata['tree']
+    if col_metadata['mediaType'] == COLLECTION_TYPE:
+        tree = col_metadata['tree']
+    else:  # need to build a one-node tree for Module
+        tree = {"id": "{id}@{version}".format(**col_metadata),
+                "title": col_metadata['title']
+                }
     os.mkdir(str(output_dir))
 
     num_pages = _count_leaves(tree) + 1  # Num. of xml files to fetch
@@ -162,12 +171,6 @@ def _tree_depth(node):
         return max([_tree_depth(child) for child in node['contents']]) + 1
     else:
         return 0
-
-
-filename_by_type = {'application/vnd.org.cnx.collection': 'collection.xml',
-                    'application/vnd.org.cnx.module': 'index.cnxml',
-                    'application/vnd.org.cnx.composite-module': None,
-                    }
 
 
 def _safe_name(name):
