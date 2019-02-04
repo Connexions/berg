@@ -4,6 +4,7 @@ import click
 __all__ = (
     'ExistingOutputDir',
     'MissingContent',
+    'MissingBakedContent',
     'OldContent',
     'UnknownEnvironment',
 )
@@ -23,6 +24,10 @@ class MissingContent(click.ClickException):
     def __init__(self, id, version):
         message = "content unavailable for '{}/{}'".format(id, version)
         super(MissingContent, self).__init__(message)
+
+
+class MissingBakedContent(MissingContent):
+    exit_code = 7
 
 
 class OldContent(click.ClickException):

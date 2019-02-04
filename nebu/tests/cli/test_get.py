@@ -42,6 +42,24 @@ class TestGetCmd:
         base_url = 'https://archive.cnx.org'
         metadata_url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
         extras_url = '{}/extras/{}'.format(base_url, col_hash)
+        contents_url = '{}/contents/{}'.format(base_url, col_hash)
+        baked_url = '{}/contents/{}:{}'.format(base_url, col_hash, col_hash)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        requests_mock.get(metadata_url,
+                          status_code=301,
+                          headers={'location': contents_url})
+
+        requests_mock.get(baked_url,
+                          status_code=301,
+                          headers={'location': contents_url})
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         # Register the data urls
         for fname, url in (('contents.json', metadata_url),
@@ -506,15 +524,27 @@ class TestGetCmd:
 
     def test_with_existing_output_dir(self, tmpcwd, invoker, requests_mock,
                                       datadir):
-        col_id = 'col00000'
-        col_version = '2.1'
+        col_id = 'col11405'
+        col_version = '1.2'
+        triple_ver = '1.2.1'
+        col_uuid = 'b699648f-405b-429f-bf11-37bad4246e7c'
+        col_hash = '{}@{}'.format(col_uuid, '2.1')
         base_url = 'https://archive.cnx.org'
-        url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
+        metadata_url = '{}/content/{}/{}'.format(base_url, col_id, col_version)
+        extras_url = '{}/extras/{}'.format(base_url, col_hash)
+        contents_url = '{}/contents/{}'.format(base_url, col_hash)
 
-        # Register the metadata url
-        register_data_file(requests_mock, datadir, 'contents.json', url)
+        requests_mock.get(metadata_url,
+                          status_code=301,
+                          headers={'location': contents_url})
 
-        expected_output_dir = '{}_1.{}'.format(col_id, col_version)
+        # Register the data urls
+        for fname, url in (('contents.json', contents_url),
+                           ('extras.json', extras_url),
+                           ):
+            register_data_file(requests_mock, datadir, fname, url)
+
+        expected_output_dir = '{}_{}'.format(col_id, triple_ver)
         (tmpcwd / expected_output_dir).mkdir()
 
         from nebu.cli.main import cli

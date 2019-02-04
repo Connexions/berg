@@ -9,6 +9,7 @@ from pathlib import Path
 from ..logger import logger
 from ._common import common_params, confirm, build_archive_url
 from .exceptions import (MissingContent,
+                         MissingBakedContent,
                          ExistingOutputDir,
                          OldContent,
                          )
@@ -22,12 +23,20 @@ from .exceptions import (MissingContent,
               help="create human-friendly book-tree")
 @click.option('-r', '--get-resources', is_flag=True, default=False,
               help="Also get all resources (images)")
+@click.option('-H', '--get-html', is_flag=True, default=False,
+              help="Also get HTML (default raw)")
+@click.option('-b', '--get-baked', is_flag=True, default=False,
+              help="fetch baked version of HTML")
 @click.argument('env')
 @click.argument('col_id')
 @click.argument('col_version')
 @click.pass_context
-def get(ctx, env, col_id, col_version, output_dir, book_tree, get_resources):
-    """download and expand the completezip to the current working directory"""
+def get(ctx, env, col_id, col_version, output_dir, book_tree,
+        get_resources, get_html, get_baked):
+    """Download content for a book from archive server"""
+
+    if get_html and get_baked:
+        logger.info('Note: "--get-baked" takes precedence over "--get-html".')
 
     base_url = build_archive_url(ctx, env)
 
@@ -45,27 +54,37 @@ def get(ctx, env, col_id, col_version, output_dir, book_tree, get_resources):
     if resp.status_code >= 400:
         raise MissingContent(col_id, req_version)
     col_metadata = resp.json()
-    if col_metadata['collated']:
-        url = resp.url + '?as_collated=False'
-        resp = requests.get(url)
-        if resp.status_code >= 400:
-            # This should never happen - indicates that only baked exists?
-            raise MissingContent(col_id, req_version)
-        col_metadata = resp.json()
+
+    if url != resp.url:  # redirected
+        url = resp.url
+
+    if get_baked and not col_metadata['collated']:
+        raise MissingBakedContent(col_id, req_version)
+
     uuid = col_metadata['id']
     # metadata fetch used legacy IDs, so will only have
     # the latest minor version - if "version" is set, the
     # user requested an explicit minor (3 part version: 1.X.Y)
     # refetch metadata, using uuid and requested version
     if version and version != col_metadata['version']:
-        url = '{}/contents/{}@{}'.format(base_url, uuid, version) + \
-              '?as_collated=False'
+        url = '{}/contents/{}@{}'.format(base_url, uuid, version)
+
+    # Are we baked? Did the user ask for baked? Fix it.
+    if col_metadata['collated'] and not get_baked:
+        url += '?as_collated=False'
+
+    if url != resp.url:
         resp = requests.get(url)
-        if resp.status_code >= 400:  # Requested version doesn't exist
+        # Requested version, or raw (!) doesn't exist
+        if resp.status_code >= 400:
             raise MissingContent(col_id, req_version)
         col_metadata = resp.json()
 
     version = col_metadata['version']
+    col_id = col_metadata['legacy_id']
+    col_version = col_metadata['legacy_version']
+
+    book_id = '{}@{}'.format(uuid, version)
 
     # Generate full output dir as soon as we have the version
     if output_dir is None:
@@ -84,7 +103,7 @@ def get(ctx, env, col_id, col_version, output_dir, book_tree, get_resources):
     resp = requests.get(url)
 
     # Latest defaults to successfully baked - we need headVersion
-    if col_version == 'latest':
+    if not(get_baked) and col_version == 'latest':
         version = resp.json()['headVersion']
         url = '{}/extras/{}@{}'.format(base_url, uuid, version)
         resp = requests.get(url)
@@ -114,7 +133,8 @@ def get(ctx, env, col_id, col_version, output_dir, book_tree, get_resources):
                            label=label,
                            width=0,
                            show_pos=True) as pbar:
-        _write_node(tree, base_url, output_dir, book_tree, get_resources, pbar)
+        _write_node(tree, base_url, output_dir, book_tree, get_html,
+                    get_resources, book_id if get_baked else None, pbar)
 
 
 def _count_leaves(node):
@@ -132,10 +152,14 @@ def _tree_depth(node):
 
 
 filename_by_type = {'application/vnd.org.cnx.collection': 'collection.xml',
-                    'application/vnd.org.cnx.module': 'index.cnxml'}
+                    'application/vnd.org.cnx.module': 'index.cnxml',
+                    'application/vnd.org.cnx.composite-module': None,
+                    }
 
 
 def _safe_name(name):
+    n = etree.XML('<n>{}</n>'.format(name))
+    name = ''.join([t for t in n.itertext()])
     return name.replace('/', '∕').replace(':', '∶')
 
 
@@ -146,13 +170,15 @@ def gen_resources_sha1_cache(write_dir, resources):
             s.write('{}  {}\n'.format(resource['id'], resource['filename']))
 
 
-def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
+def _write_node(node, base_url, out_dir, book_tree=False, get_html=False,
+                get_resources=False, book_id=None,
                 pbar=None, depth=None, pos={0: 0}, lvl=0):
     """Recursively write out contents of a book
        Arguments are:
         root of the json tree, archive url to fetch from, existing directory
-       to write out to, format to write (book tree or flat) as well as a
-       click progress bar, if desired. Depth is height of tree, used to reset
+       to write out to, format to write (book tree or flat), whether to fetch
+       HTML pages, whether to fetch resources (images), as well as a click
+       progress bar, if desired. Depth is height of tree, used to reset
        the lowest level counter (pages) per chapter. All other levels (Chapter,
        unit) count up for entire book. Remaining args are used for recursion"""
     if depth is None:
@@ -172,7 +198,11 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
     write_dir = out_dir  # Allows nesting only for book_tree case
 
     # Fetch and store the core file for each node
-    resp = requests.get('{}/contents/{}'.format(base_url, node['id']))
+    if book_id is not None:
+        my_id = '{}:{}'.format(book_id, node['id'])
+    else:
+        my_id = node['id']
+    resp = requests.get('{}/contents/{}'.format(base_url, my_id))
     if resp:  # Subcollections cannot (yet) be fetched directly
         metadata = resp.json()
 
@@ -186,20 +216,29 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
 
         # Deal with core XML file and output directory
         filename = filename_by_type[metadata['mediaType']]
-        url = '{}/resources/{}'.format(base_url, resources[filename]['id'])
-        file_resp = requests.get(url)
-        if not(book_tree) and filename == 'index.cnxml':
+        if not(book_tree) and filename != 'collection.xml':
             write_dir = write_dir / metadata['legacy_id']
             os.mkdir(str(write_dir))
-        filepath = write_dir / filename
 
         # Cache/store sha1-s for resources in a 'dot' file
         gen_resources_sha1_cache(write_dir, resources)
 
-        # core files are XML - this parse/serialize removes numeric entities
-        filepath.write_bytes(etree.tostring(etree.XML(file_resp.text),
-                                            encoding='utf-8'))
+        if filename:  # baked CompositeModules have no CNXML file
+            url = '{}/resources/{}'.format(base_url, resources[filename]['id'])
+            file_resp = requests.get(url)
 
+            filepath = write_dir / filename
+
+            # core files are XML - parse/serialize removes numeric entities
+            filepath.write_bytes(etree.tostring(etree.XML(file_resp.text),
+                                                encoding='utf-8'))
+
+        if (book_id or get_html) and 'content' in metadata:
+            content_filename = 'index.xhtml'
+            filepath = write_dir / content_filename
+            xml = etree.XML(metadata['content'])
+            filepath.write_bytes(etree.tostring(xml, encoding='utf-8',
+                                                pretty_print=True))
         if get_resources:
             for res in resources:  # Dict keyed by resource filename
                 #  Exclude core file, already written out, above
@@ -226,5 +265,5 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
                 pos[lvl] = 0
             else:
                 pos[lvl] += 1
-            _write_node(child, base_url, out_dir, book_tree, get_resources,
-                        pbar, depth, pos, lvl)
+            _write_node(child, base_url, out_dir, book_tree, get_html,
+                        get_resources, book_id, pbar, depth, pos, lvl)
