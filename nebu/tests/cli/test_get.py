@@ -720,6 +720,14 @@ class TestGetCmd:
         metadata_url = '{}/content/{}/{}'.format(base_url, mod_id, mod_version)
         contents_url = '{}/contents/{}'.format(base_url, mod_hash)
         extras_url = '{}/extras/{}'.format(base_url, mod_hash)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         requests_mock.get(metadata_url,
                           status_code=301,
@@ -767,6 +775,14 @@ class TestGetCmd:
         metadata_url = '{}/content/{}/{}'.format(base_url, mod_id, mod_version)
         contents_url = '{}/contents/{}'.format(base_url, mod_hash)
         extras_url = '{}/extras/{}'.format(base_url, mod_hash)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         requests_mock.get(metadata_url,
                           status_code=301,
@@ -814,6 +830,14 @@ class TestGetCmd:
         metadata_url = '{}/content/{}/{}'.format(base_url, mod_id, mod_version)
         contents_url = '{}/contents/{}'.format(base_url, mod_hash)
         extras_url = '{}/extras/{}'.format(base_url, mod_hash)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         requests_mock.get(metadata_url,
                           status_code=301,
@@ -862,6 +886,14 @@ class TestGetCmd:
         metadata_url = '{}/content/{}/{}'.format(base_url, mod_id, mod_version)
         contents_url = '{}/contents/{}'.format(base_url, mod_hash)
         extras_url = '{}/extras/{}'.format(base_url, mod_hash)
+        settings_url = 'https://cnx.org/scripts/settings.js'
+
+        # Register settings fragment
+        requests_mock.get(
+            settings_url,
+            text='''cnxarchive: {
+                  host: 'archive.cnx.org'
+                }''')
 
         requests_mock.get(metadata_url,
                           status_code=301,

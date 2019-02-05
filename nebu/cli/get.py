@@ -70,8 +70,8 @@ def get(ctx, target, output_dir, book_tree,
         raise MissingContent('/'.join(target))
     col_metadata = resp.json()
 
-    if (col_metadata['mediaType'] == COLLECTION_TYPE and
-            get_baked and not col_metadata['collated']):
+    if get_baked and (col_metadata['mediaType'] != COLLECTION_TYPE or
+                      not col_metadata['collated']):
         raise MissingBakedContent('/'.join(target))
 
     uuid = col_metadata['id']
@@ -85,7 +85,8 @@ def get(ctx, target, output_dir, book_tree,
         url = '{}/contents/{}@{}'.format(base_url, uuid, version)
 
     # Are we baked? Did the user ask for baked? Fix it.
-    if col_metadata['collated'] and not get_baked:
+    if col_metadata['mediaType'] == COLLECTION_TYPE and \
+            col_metadata['collated'] and not get_baked:
         url += '?as_collated=False'
 
     if url != resp.url:
