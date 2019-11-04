@@ -116,3 +116,51 @@ def prepare():
         pass
 
     return {'closer': closer, 'settings': settings}
+
+
+class Environ(object):
+    """Configuration for a specific deployed environment"""
+
+    def __init__(self, name, url):
+        self.name = name
+        self.url = url
+
+    def __repr__(self):
+        r = (
+            "{self.__class__.__name__}"
+            "('{self.name}', **{kwargs})".format(
+                self=self,
+                kwargs=self.as_dict(),
+            )
+        )
+        return r
+
+    def __eq__(self, other):
+        is_same_name = self.name == other.name
+        is_same_info = self.as_dict() == other.as_dict()
+        return is_same_name and is_same_info
+
+    def as_dict(self):
+        attrs = ['url']
+        return {a: getattr(self, a, None) for a in attrs}
+
+
+class Config(object):
+    """Configuration for the whole application"""
+
+    def __init__(self, settings, environs=[]):
+        self.settings = settings
+        self._environs = environs
+
+    @classmethod
+    def from_file(cls, file):
+        p = _read_props_from_filepath(file)
+        environs = [Environ(k, **v) for k, v in p['environs'].items()]
+        return cls(p['settings'], environs)
+
+    @property
+    def environs(self):
+        return {e.name: e for e in self._environs}
+
+    def get_env(self, env):
+        return self.environs.get(env, None)
