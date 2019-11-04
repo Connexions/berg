@@ -51,6 +51,31 @@ def _write_default_config_file():
         fb.write(INITIAL_DEFAULT_CONFIG)
 
 
+def _read_props_from_filepath(config_filepath):
+    """Given a ``config_filepath`` containing INI formatted settings,
+    read these in and return a dictionary of properties.
+
+    """
+    config = configparser.ConfigParser()
+    config.read(str(config_filepath))
+
+    props = {
+        '_config_file': config_filepath.resolve(),
+        'settings': {},
+        'environs': {
+            # short-name : settings
+        },
+    }
+    for section in config.sections():
+        if not section.startswith(CONFIG_SECTION_ENVIRON_PREFIX):
+            continue  # ignore all other sections
+        short_name = section[len(CONFIG_SECTION_ENVIRON_PREFIX):]
+        props['environs'][short_name] = dict(config[section])
+    for k, v in config['settings'].items():
+        props['settings'][k] = v
+    return props
+
+
 def discover_settings():
     """Discover settings from environment variables and config files
 
@@ -72,22 +97,8 @@ def discover_settings():
         config_filepath = CONFIG_FILE_LOC
         if not config_filepath.exists():
             _write_default_config_file()
-
-    config = configparser.ConfigParser()
-    config.read(str(config_filepath))
-
-    settings = {
-        '_config_file': config_filepath.resolve(),
-        'environs': {
-            # short-name : settings
-        },
-    }
-    for section in config.sections():
-        if not section.startswith(CONFIG_SECTION_ENVIRON_PREFIX):
-            continue  # ignore all other sections
-        short_name = section[len(CONFIG_SECTION_ENVIRON_PREFIX):]
-        settings['environs'][short_name] = dict(config[section])
-    return settings
+    props = _read_props_from_filepath(config_filepath)
+    return props
 
 
 def prepare():
