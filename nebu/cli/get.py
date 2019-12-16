@@ -1,7 +1,11 @@
 import os
+import time
 
 import click
 import requests
+
+import concurrent.futures
+import threading
 
 from lxml import etree
 from pathlib import Path
@@ -12,7 +16,17 @@ from .exceptions import (MissingContent,
                          ExistingOutputDir,
                          OldContent,
                          )
+thread_local = threading.local()
 
+def _get_versions(col_version):
+    if col_version.count('.') <= 1:
+        return col_version, None
+
+    full_version = col_version.split('.')
+    col_version = '.'.join(full_version[:2])
+    version = '.'.join(full_version[1:])
+
+    return col_version, version
 
 @click.command()
 @common_params
@@ -28,15 +42,23 @@ from .exceptions import (MissingContent,
 @click.pass_context
 def get(ctx, env, col_id, col_version, output_dir, book_tree, get_resources):
     """download and expand the completezip to the current working directory"""
+    print('''
+        ctx: {},
+        env: {},
+        col_id: {},
+        col_version: {},
+        output_dir: {},
+        book_tree: {},
+        get_resources: {} \n'''.format(
+        ctx, env, col_id, col_version, output_dir, book_tree, get_resources
+    ))
 
+    start_time = time.time()
     base_url = build_archive_url(ctx, env)
-
     version = None
     req_version = col_version
-    if col_version.count('.') > 1:
-        full_version = col_version.split('.')
-        col_version = '.'.join(full_version[:2])
-        version = '.'.join(full_version[1:])
+
+    col_version, version = _get_versions(col_version)
 
     col_hash = '{}/{}'.format(col_id, col_version)
     # Fetch metadata
@@ -129,6 +151,9 @@ def get(ctx, env, col_id, col_version, output_dir, book_tree, get_resources):
                            width=0,
                            show_pos=True) as pbar:
         _write_node(tree, base_url, output_dir, book_tree, get_resources, pbar)
+    duration = time.time() - start_time
+
+    print("Downloaded in {} seconds".format(duration))
 
 
 def _count_leaves(node):
@@ -157,66 +182,81 @@ def store_sha1(sha1, write_dir, filename):
     with (write_dir / '.sha1sum').open('a') as s:
         s.write('{}  {}\n'.format(sha1, filename))
 
+def _get_session():
+    if not hasattr(thread_local, "session"):
+        thread_local.session = requests.Session()
+    return thread_local.session
 
 def _fetch_node(base_url, write_dir, book_tree, get_resources, node_id, pbar):
-    resp = requests.get('{}/contents/{}'.format(base_url, node_id))
-    if resp:  # Subcollections cannot (yet) be fetched directly
-        metadata = resp.json()
+    session = _get_session()
+    url = '{}/contents/{}'.format(base_url, node_id)
 
-        """index.cnxml.html files should not be edited nor published (they are
-        generated and regenerated in-place in the database), so let's just
-        not consider them as resources (or download them) at all.
-        """
-        # skip index.cnxml.html
-        resources = {res['filename']: res for res in metadata['resources']
-                     if res['filename'] != 'index.cnxml.html'}
+    with session.get(url) as resp:
+        if resp:  # Subcollections cannot (yet) be fetched directly
+            metadata = resp.json()
 
-        # Deal with core XML file and output directory
-        filename = filename_by_type[metadata['mediaType']]
-        url = '{}/resources/{}'.format(base_url, resources[filename]['id'])
-        file_resp = requests.get(url)
-        if not(book_tree) and filename == 'index.cnxml':
-            write_dir = write_dir / metadata['legacy_id']
-            os.mkdir(str(write_dir))
-        filepath = write_dir / filename
+            """
+            index.cnxml.html files should not be edited nor published (they are
+            generated and regenerated in-place in the database), so let's just
+            not consider them as resources (or download them) at all.
+            """
+            # skip index.cnxml.html
+            resources = {res['filename']: res for res in metadata['resources']
+                         if res['filename'] != 'index.cnxml.html'}
 
-        # core files are XML - this parse/serialize removes numeric entities
-        filepath.write_bytes(etree.tostring(etree.XML(file_resp.content),
-                                            encoding='utf-8'))
+            # Deal with core XML file and output directory
+            filename = filename_by_type[metadata['mediaType']]
+            url = '{}/resources/{}'.format(base_url, resources[filename]['id'])
+            file_resp = requests.get(url)
+            if not(book_tree) and filename == 'index.cnxml':
+                write_dir = write_dir / metadata['legacy_id']
+                os.mkdir(str(write_dir))
+            filepath = write_dir / filename
 
-        # Cache the sha1 for this node
-        sha1 = calculate_sha1(write_dir / filename)
-        store_sha1(sha1, write_dir, filename)
+            # core files are XML - this parse/serialize removes numeric entities
+            filepath.write_bytes(etree.tostring(etree.XML(file_resp.content),
+                                                encoding='utf-8'))
 
-        if get_resources:
-            for res in resources:  # Dict keyed by resource filename
-                #  Exclude core file, already written out, above
-                if res != filename:
-                    filepath = write_dir / res
-                    url = '{}/resources/{}'.format(base_url,
-                                                   resources[res]['id'])
-                    file_resp = requests.get(url)
-                    filepath.write_bytes(file_resp.content)
-                    # NOTE: the id is the sha1
-                    store_sha1(resources[res]['id'], write_dir, res)
+            # Cache the sha1 for this node
+            sha1 = calculate_sha1(write_dir / filename)
+            store_sha1(sha1, write_dir, filename)
 
-        if pbar is not None:
-            pbar.update(1)
+            if get_resources:
+                for res in resources:  # Dict keyed by resource filename
+                    #  Exclude core file, already written out, above
+                    if res != filename:
+                        filepath = write_dir / res
+                        url = '{}/resources/{}'.format(base_url,
+                                                       resources[res]['id'])
+                        file_resp = requests.get(url)
+                        filepath.write_bytes(file_resp.content)
+                        # NOTE: the id is the sha1
+                        store_sha1(resources[res]['id'], write_dir, res)
+
+            if pbar is not None:
+                pbar.update(1)
 
 
 def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
                 pbar=None, depth=None, pos={0: 0}, lvl=0):
-    """Recursively write out contents of a book
-       Arguments are:
-        root of the json tree, archive url to fetch from, existing directory
-       to write out to, format to write (book tree or flat) as well as a
-       click progress bar, if desired. Depth is height of tree, used to reset
-       the lowest level counter (pages) per chapter. All other levels (Chapter,
-       unit) count up for entire book. Remaining args are used for recursion"""
+
+    """ Recursively write out contents of a book """
+    print('node: {}'.format(node))                      # Root of the json tree
+    print('base_url: {}'.format(base_url))              # Archive url to fetch from
+    print('out_dir: {}'.format(out_dir))                # Existing directory to write out to
+    print('book_tree: {}'.format(book_tree))            # Format to write (book tree or flat) as well as a click pbar, if desired.
+    print('get_resources: {}'.format(get_resources))
+    print('pbar: {}'.format(pbar))
+    print('depth: {}'.format(depth))                    # Depth is height of tree used to reset
+    print('pos: {}'.format(pos))                        # Lowest level counter (pages) per chapter.
+    print('lvl: {}'.format(lvl))                        # All other levels (Chapter, unit) count up for entire book.
+    """ Remaining args are used for recursion """
+
     if depth is None:
         depth = _tree_depth(node)
         pos = {0: 0}
         lvl = 0
+
     if book_tree:
         #  HACK Prepending zero-filled numbers to folders to fix the sort order
         if lvl > 0:
@@ -229,7 +269,7 @@ def _write_node(node, base_url, out_dir, book_tree=False, get_resources=False,
 
     write_dir = out_dir  # Allows nesting only for book_tree case
 
-    # Fetch and store the core file for each node
+    # Fetch and store the core file for each node, store where?
     _fetch_node(base_url, write_dir, book_tree, get_resources, node['id'],
                 pbar)
 
